@@ -53,12 +53,6 @@ def update_ema_model_(
     nn.Module
         Updated moving average model.
     """
-    # Update parameters
-    # _update_ema_weights(
-    #     ema_model.parameters(), online_model.parameters(), ema_decay_rate
-    # )
-    # # Update buffers
-    # _update_ema_weights(ema_model.buffers(), online_model.buffers(), ema_decay_rate)
     param = [p.data for p in online_model.parameters()]
     param_ema = [p.data for p in ema_model.parameters()]
 
