@@ -9,10 +9,8 @@ import torchvision.datasets as datasets
 from tqdm import tqdm
 from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
 
-sys.path.append('/home/liuyiming/final_code_v2/lkz_dae')
 from models.ncsnpp import NCSNpp
 from configs.default_cifar10_configs import get_config
-sys.path.append('/home/liuyiming/final_code_v2/lkz_dae/cm')
 from consistency_models import ConsistencySamplingAndEditing, ConsistencyTraining, ema_decay_rate_schedule
 from utils import update_ema_model_
 
