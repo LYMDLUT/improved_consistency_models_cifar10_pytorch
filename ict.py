@@ -31,8 +31,8 @@ if __name__ == "__main__":
         transforms.ToTensor(),
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     ])
-    train_dataset = datasets.CIFAR10(root='/home/liuyiming/final_code_v2/test/data', train=True, transform=transform, download=True)
-    test_dataset = datasets.CIFAR10(root='/home/liuyiming/final_code_v2/test/data', train=False, transform=transform)
+    train_dataset = datasets.CIFAR10(root='./data', train=True, transform=transform, download=True)
+    test_dataset = datasets.CIFAR10(root='./data', train=False, transform=transform)
 
     # 定义数据加载器
     train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True)
