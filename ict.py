@@ -100,7 +100,7 @@ if __name__ == "__main__":
                 unet_ema = accelerator.unwrap_model(cm_model_ema)
                 torch.save(unet_ema.state_dict(), f'ict_ema_4096e_{epoch}e.pth')
                 unet = accelerator.unwrap_model(cm_model)
-                torch.save(unet.state_dict(), f'ict_4096e_{epoch}.pth')
+                torch.save(unet.state_dict(), f'ict_4096e_{epoch}e.pth')
                 unet_ema.eval()
                 with torch.no_grad():
                     samples = consistency_sampling_and_editing(
