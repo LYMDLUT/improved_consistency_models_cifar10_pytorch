@@ -98,9 +98,9 @@ if __name__ == "__main__":
                 print('训练比例',current_training_step/total_training_steps*100,'%')
                 print(f'Epoch [{epoch+1}/{num_epochs}], Step [{i+1}/{total_steps}], Loss: {loss.item():.4f}')
                 unet_ema = accelerator.unwrap_model(cm_model_ema)
-                torch.save(unet_ema.state_dict(), "ict_ema_4096epoch.pth")
+                torch.save(unet_ema.state_dict(), f'ict_ema_4096e_{epoch}e.pth')
                 unet = accelerator.unwrap_model(cm_model)
-                torch.save(unet.state_dict(), "ict_4096epoch.pth")
+                torch.save(unet.state_dict(), f'ict_4096e_{epoch}.pth')
                 unet_ema.eval()
                 with torch.no_grad():
                     samples = consistency_sampling_and_editing(
@@ -111,4 +111,4 @@ if __name__ == "__main__":
                         verbose=True,
                     )
                 from torchvision.utils import save_image
-                save_image((samples/2+0.5).cpu().detach(), 'ict_images.png')
+                save_image((samples/2+0.5).cpu().detach(), f'ict_images_{epoch}.png')
