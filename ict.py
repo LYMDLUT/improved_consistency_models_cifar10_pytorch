@@ -24,7 +24,7 @@ if __name__ == "__main__":
     
     accelerator = Accelerator()
     batch_size = 64
-    num_epochs = 200
+    num_epochs = 4096
     # load dataset
     transform = transforms.Compose([
         transforms.RandomHorizontalFlip(),
