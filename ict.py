@@ -97,10 +97,10 @@ if __name__ == "__main__":
             if accelerator.process_index == 0 and (i+1) % 10 == 0:
                 print('训练比例',current_training_step/total_training_steps*100,'%')
                 print(f'Epoch [{epoch+1}/{num_epochs}], Step [{i+1}/{total_steps}], Loss: {loss.item():.4f}')
-                unet = accelerator.unwrap_model(cm_model_ema)
-                torch.save(unet.state_dict(), "ict_ema_500e_bs128.pth")
-                unet_ema = accelerator.unwrap_model(cm_model)
-                torch.save(unet_ema.state_dict(), "ict_500e_bs128.pth")
+                unet_ema = accelerator.unwrap_model(cm_model_ema)
+                torch.save(unet_ema.state_dict(), "ict_ema_500e_bs128.pth")
+                unet = accelerator.unwrap_model(cm_model)
+                torch.save(unet.state_dict(), "ict_500e_bs128.pth")
                 unet_ema.eval()
                 with torch.no_grad():
                     samples = consistency_sampling_and_editing(
