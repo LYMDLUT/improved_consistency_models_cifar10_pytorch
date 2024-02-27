@@ -21,19 +21,6 @@ def pad_dims_like(x: Tensor, other: Tensor) -> Tensor:
     ndim = other.ndim - x.ndim
     return x.view(*x.shape, *((1,) * ndim))
 
-
-def _update_ema_weights(
-    ema_weight_iter: Iterator[Tensor],
-    online_weight_iter: Iterator[Tensor],
-    ema_decay_rate: float,
-) -> None:
-    for ema_weight, online_weight in zip(ema_weight_iter, online_weight_iter):
-        if ema_weight.data is None:
-            ema_weight.data.copy_(online_weight.data)
-        else:
-            ema_weight.data.lerp_(online_weight.data, 1.0 - ema_decay_rate)
-
-
 def update_ema_model_(
     ema_model: nn.Module, online_model: nn.Module, ema_decay_rate: float
 ) -> nn.Module:
