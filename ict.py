@@ -23,7 +23,7 @@ if __name__ == "__main__":
     cm_model_ema.eval()
     
     accelerator = Accelerator()
-    batch_size = 64
+    batch_size = 128
     num_epochs = 4096
     # load dataset
     transform = transforms.Compose([
@@ -69,6 +69,7 @@ if __name__ == "__main__":
     current_training_step = 0
     total_steps = len(train_loader)
     total_training_steps = num_epochs * len(train_loader)
+    epoch_temp = 0
     for epoch in range(num_epochs):
         train_loader = accelerator.prepare(train_loader)
         for i, (images, lablel) in enumerate(train_loader):
@@ -94,13 +95,18 @@ if __name__ == "__main__":
             torch.distributed.barrier()
             current_training_step = current_training_step + 1
             
-            if accelerator.process_index == 0 and (i+1) % 10 == 0:
+            if accelerator.process_index == 0 and epoch_temp != epoch:
+                epoch_temp = epoch
                 print('训练比例',current_training_step/total_training_steps*100,'%')
                 print(f'Epoch [{epoch+1}/{num_epochs}], Step [{i+1}/{total_steps}], Loss: {loss.item():.4f}')
                 unet_ema = accelerator.unwrap_model(cm_model_ema)
                 torch.save(unet_ema.state_dict(), f'ict_ema_4096e.pth')
+                if epoch % 1000 == 0:
+                    torch.save(unet_ema.state_dict(), f'ict_ema_4096e_{epoch}e.pth')
                 unet = accelerator.unwrap_model(cm_model)
                 torch.save(unet.state_dict(), f'ict_4096e.pth')
+                if epoch % 1000 == 0:
+                    torch.save(unet.state_dict(), f'ict_4096e_{epoch}e.pth')
                 unet_ema.eval()
                 with torch.no_grad():
                     samples = consistency_sampling_and_editing(
