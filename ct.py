@@ -76,8 +76,8 @@ if __name__ == "__main__":
         param.requires_grad = False
     ema_student_model.eval()
     
-    batch_size = 128
-    num_epochs = 200
+    batch_size = 20
+    num_epochs = 4096
     # load dataset
     transform = transforms.Compose([
         transforms.RandomHorizontalFlip(),
@@ -120,6 +120,7 @@ if __name__ == "__main__":
     current_training_step = 0
     total_steps = len(train_loader)
     total_training_steps = num_epochs * len(train_loader)
+    epoch_temp = 0
     for epoch in tqdm(range(num_epochs)):
         train_loader = accelerator.prepare(train_loader)
         for i, (images, lablel) in enumerate(train_loader):
@@ -160,12 +161,18 @@ if __name__ == "__main__":
                 0.99993,
             )
             
-            if accelerator.process_index == 0 and (i+1) % 10 == 0:
+            if accelerator.process_index == 0 and epoch_temp != epoch:
+                epoch_temp = epoch
+                print('训练比例',current_training_step/total_training_steps*100,'%')
                 print(f'Epoch [{epoch+1}/{num_epochs}], Step [{i+1}/{total_steps}], Loss: {loss.item():.4f}')
-                unet = accelerator.unwrap_model(cm_model_ema)
-                torch.save(unet.state_dict(), "ct_ema_200e_bs128.pth")
-                unet_ema = accelerator.unwrap_model(cm_model)
-                torch.save(unet_ema.state_dict(), "ct_200e_bs128.pth")
+                unet_ema = accelerator.unwrap_model(cm_model_ema)
+                torch.save(unet_ema.state_dict(), f'ct_ema_4096e.pth')
+                if epoch % 1000 == 0:
+                    torch.save(unet_ema.state_dict(), f'ct_ema_4096e_{epoch}e.pth')
+                unet = accelerator.unwrap_model(cm_model)
+                torch.save(unet.state_dict(), f'ct_4096e.pth')
+                if epoch % 1000 == 0:
+                    torch.save(unet.state_dict(), f'ct_4096e_{epoch}e.pth')
                 unet_ema.eval()
                 with torch.no_grad():
                     samples = consistency_sampling_and_editing(
@@ -176,4 +183,4 @@ if __name__ == "__main__":
                         verbose=True,
                     )
                 from torchvision.utils import save_image
-                save_image((samples/2+0.5).cpu().detach(), 'ct_images.png')
+                save_image((samples/2+0.5).cpu().detach(), f'ct_images_{epoch}.png')
