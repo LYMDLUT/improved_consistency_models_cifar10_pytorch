@@ -8,6 +8,7 @@ import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 from tqdm import tqdm
 from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
+from collections.abc import Sequence
 
 from models.ncsnpp import NCSNpp
 from configs.default_cifar10_configs import get_config
