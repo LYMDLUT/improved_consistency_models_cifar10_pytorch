@@ -113,7 +113,7 @@ if __name__ == "__main__":
     sigma_min = 0.002, # minimum std of noise
     sigma_data = 0.5, # std of the data
     )
-    lpips = LearnedPerceptualImagePatchSimilarity(net_type="squeeze")
+    lpips = PerceptualLoss(net_type=("vgg", "squeeze"))
     accelerator = Accelerator()
     cm_model, cm_model_ema, ema_student_model, optimizer, test_loader, train_loader, scheduler, lpips, consistency_training = accelerator.prepare(cm_model, cm_model_ema, ema_student_model, optimizer, test_loader, train_loader, scheduler, lpips, consistency_training)
     
