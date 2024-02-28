@@ -21,6 +21,7 @@ def pad_dims_like(x: Tensor, other: Tensor) -> Tensor:
     ndim = other.ndim - x.ndim
     return x.view(*x.shape, *((1,) * ndim))
 
+@torch.no_grad()
 def update_ema_model_(
     ema_model: nn.Module, online_model: nn.Module, ema_decay_rate: float
 ) -> nn.Module:
