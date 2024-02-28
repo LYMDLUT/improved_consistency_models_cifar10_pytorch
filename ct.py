@@ -157,7 +157,7 @@ if __name__ == "__main__":
             update_ema_model_(
                 ema_student_model,
                 cm_model,
-                0.99,
+                0.9999,
             )
             
             if accelerator.process_index == 0 and epoch_temp != epoch:
