@@ -76,7 +76,7 @@ if __name__ == "__main__":
         param.requires_grad = False
     ema_student_model.eval()
     
-    batch_size = 20
+    batch_size = 128
     num_epochs = 4096
     # load dataset
     transform = transforms.Compose([
