@@ -67,14 +67,10 @@ if __name__ == "__main__":
     cm_model = NCSNpp(config)
     #cm_model.load_state_dict(torch.load('/home/liuyiming/final_code_v2/convert_ckpt/ct-lpips/checkpoint_74.pth', map_location='cpu'))
     cm_model_ema = deepcopy(cm_model)
-    ema_student_model = deepcopy(cm_model)
     cm_model.train()
     for param in cm_model_ema.parameters():
         param.requires_grad = False
     cm_model_ema.eval()
-    for param in ema_student_model.parameters():
-        param.requires_grad = False
-    ema_student_model.eval()
     
     batch_size = 20
     num_epochs = 4096
@@ -152,13 +148,6 @@ if __name__ == "__main__":
                 initial_timesteps=consistency_training.initial_timesteps,
             )
             update_ema_model_(cm_model_ema, cm_model, ema_decay_rate)
-            
-            # Update EMA student model
-            update_ema_model_(
-                ema_student_model,
-                cm_model,
-                0.99993,
-            )
             
             if accelerator.process_index == 0 and epoch_temp != epoch:
                 epoch_temp = epoch
