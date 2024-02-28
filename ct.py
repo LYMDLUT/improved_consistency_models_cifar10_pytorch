@@ -148,7 +148,7 @@ if __name__ == "__main__":
             # EMA Update
             ema_decay_rate = ema_decay_rate_schedule(
                 output.num_timesteps,
-                initial_ema_decay_rate=0.95,
+                initial_ema_decay_rate=0.9,
                 initial_timesteps=consistency_training.initial_timesteps,
             )
             update_ema_model_(cm_model_ema, cm_model, ema_decay_rate)
