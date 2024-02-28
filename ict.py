@@ -71,7 +71,6 @@ if __name__ == "__main__":
     total_training_steps = num_epochs * len(train_loader)
     epoch_temp = 0
     for epoch in range(num_epochs):
-        train_loader = accelerator.prepare(train_loader)
         for i, (images, lablel) in enumerate(train_loader):
             # Zero out Grads
             optimizer.zero_grad()
