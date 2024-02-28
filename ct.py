@@ -92,7 +92,7 @@ if __name__ == "__main__":
     test_loader = torch.utils.data.DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=False)
     
     # create optimizer
-    optimizer = torch.optim.RAdam(cm_model.parameters(), lr=1e-4, betas=(0.9, 0.995)) # setup your optimizer
+    optimizer = torch.optim.RAdam(cm_model.parameters(), lr=2e-4, betas=(0.9, 0.995)) # setup your optimizer
     scheduler = torch.optim.lr_scheduler.LinearLR(
             optimizer,
             start_factor=1e-5,
