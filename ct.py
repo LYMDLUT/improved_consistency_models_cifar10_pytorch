@@ -1,6 +1,7 @@
 import torch
 import sys
 from torch import nn
+import torch.nn.functional as F
 from typing import Tuple, Union
 from accelerate import Accelerator
 from copy import deepcopy
