@@ -63,11 +63,11 @@ if __name__ == "__main__":
     sigma_data = 0.5, # std of the data
     )
     fid = FrechetInceptionDistance(reset_real_features=False, normalize=True)
-    
-    cm_model, cm_model_ema, optimizer, train_loader, pseudo_huber_loss, scheduler, improved_consistency_training, fid = accelerator.prepare(cm_model, cm_model_ema, optimizer, train_loader, pseudo_huber_loss, scheduler, improved_consistency_training, fid)
     for i, batch in enumerate(train_loader):
-        fid.update(accelerator.gather(batch[0]), real=True)
+        fid.update(batch[0], real=True)
     torch.cuda.empty_cache() 
+    cm_model, cm_model_ema, optimizer, train_loader, pseudo_huber_loss, scheduler, improved_consistency_training, fid = accelerator.prepare(cm_model, cm_model_ema, optimizer, train_loader, pseudo_huber_loss, scheduler, improved_consistency_training, fid)
+
     current_training_step = 0
     total_steps = len(train_loader)
     total_training_steps = num_epochs * len(train_loader)
