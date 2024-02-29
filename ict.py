@@ -10,12 +10,13 @@ from models.ncsnpp import NCSNpp
 from configs.default_cifar10_configs import get_config
 from consistency_models import ConsistencySamplingAndEditing, ImprovedConsistencyTraining, pseudo_huber_loss
 from utils import update_ema_model_
+from torchmetrics.image.fid import FrechetInceptionDistance
 
 if __name__ == "__main__":
     # create model
     config = get_config()
     cm_model = NCSNpp(config)
-    #cm_model.load_state_dict(torch.load('/home/liuyiming/final_code_v2/convert_ckpt/ct-lpips/checkpoint_74.pth', map_location='cpu'))
+    #cm_model.load_state_dict(torch.load('./checkpoint_74.pth', map_location='cpu'))
     cm_model_ema = deepcopy(cm_model)
     cm_model.train()
     for param in cm_model_ema.parameters():
@@ -36,7 +37,6 @@ if __name__ == "__main__":
 
     # 定义数据加载器
     train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True)
-    test_loader = torch.utils.data.DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=False)
     
     # create optimizer
     optimizer = torch.optim.RAdam(cm_model.parameters(), lr=1e-4, betas=(0.9, 0.999)) # setup your optimizer
@@ -62,10 +62,12 @@ if __name__ == "__main__":
     sigma_min = 0.002, # minimum std of noise
     sigma_data = 0.5, # std of the data
     )
+    fid = FrechetInceptionDistance(reset_real_features=False, normalize=True)
     
-    
-    cm_model, cm_model_ema, optimizer, test_loader, train_loader, pseudo_huber_loss, scheduler, improved_consistency_training = accelerator.prepare(cm_model, cm_model_ema, optimizer, test_loader, train_loader, pseudo_huber_loss, scheduler, improved_consistency_training)
-    
+    cm_model, cm_model_ema, optimizer, train_loader, pseudo_huber_loss, scheduler, improved_consistency_training, fid = accelerator.prepare(cm_model, cm_model_ema, optimizer, train_loader, pseudo_huber_loss, scheduler, improved_consistency_training, fid)
+    for i, batch in enumerate(train_loader):
+        fid.update(accelerator.gather(batch[0]), real=True)
+    torch.cuda.empty_cache() 
     current_training_step = 0
     total_steps = len(train_loader)
     total_training_steps = num_epochs * len(train_loader)
@@ -117,3 +119,20 @@ if __name__ == "__main__":
                 )
             from torchvision.utils import save_image
             save_image((samples/2+0.5).cpu().detach(), f'ict_images_{epoch}.png')
+        
+        if epoch % 10 == 0:
+            for i in tqdm(range(int(50000 / batch_size / accelerator.num_processes))):
+                with torch.no_grad():
+                    samples = consistency_sampling_and_editing(
+                        cm_model, # student model or any trained model
+                        torch.randn((batch_size, 3, 32, 32), device=accelerator.device), # used to infer the shapes
+                        sigmas=[80.0], # sampling starts at the maximum std (T)
+                        clip_denoised=True, # whether to clamp values to [-1, 1] range
+                        verbose=True)
+                image = (samples / 2 + 0.5).clamp(0, 1)  
+                fid.update(accelerator.gather(image), real=False)
+            fid_result = float(fid.compute())
+            if accelerator.is_main_process:
+                print(f"FID: {fid_result}")
+            fid.reset()
+            torch.cuda.empty_cache()
