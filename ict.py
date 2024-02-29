@@ -121,7 +121,7 @@ if __name__ == "__main__":
             save_image((samples/2+0.5).cpu().detach(), f'ict_images_{epoch}.png')
         
         if epoch % 10 == 0:
-            for i in tqdm(range(int(50000 / batch_size / accelerator.num_processes))):
+            for i in range(int(50000 / batch_size / accelerator.num_processes)):
                 with torch.no_grad():
                     samples = consistency_sampling_and_editing(
                         cm_model, # student model or any trained model
