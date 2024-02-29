@@ -646,7 +646,7 @@ class ConsistencySamplingAndEditing:
 
         # Progressively denoise the sample and skip the first step as it has already
         # been run
-        pbar = tqdm(sigmas[1:], disable=(not verbose))
+        pbar = tqdm(sigmas[1:], disable=verbose)
         for sigma in pbar:
             pbar.set_description(f"sampling (σ={sigma:.4f})")
 
