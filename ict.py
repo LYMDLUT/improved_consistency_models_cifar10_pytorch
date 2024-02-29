@@ -62,9 +62,9 @@ if __name__ == "__main__":
     sigma_min = 0.002, # minimum std of noise
     sigma_data = 0.5, # std of the data
     )
-    fid = FrechetInceptionDistance(reset_real_features=False, normalize=True)
+    fid = FrechetInceptionDistance(reset_real_features=False, normalize=True).to(accelerator.device)
     for i, batch in enumerate(train_loader):
-        fid.update(batch[0], real=True)
+        fid.update(batch[0].to(accelerator.device), real=True)
     torch.cuda.empty_cache() 
     cm_model, cm_model_ema, optimizer, train_loader, pseudo_huber_loss, scheduler, improved_consistency_training, fid = accelerator.prepare(cm_model, cm_model_ema, optimizer, train_loader, pseudo_huber_loss, scheduler, improved_consistency_training, fid)
 
