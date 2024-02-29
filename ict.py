@@ -69,7 +69,7 @@ if __name__ == "__main__":
     current_training_step = 0
     total_steps = len(train_loader)
     total_training_steps = num_epochs * len(train_loader)
-    epoch_temp = 0
+    
     for epoch in range(num_epochs):
         for i, (images, lablel) in enumerate(train_loader):
             # Zero out Grads
@@ -93,27 +93,27 @@ if __name__ == "__main__":
             update_ema_model_(cm_model_ema, cm_model, 0.9999)
             torch.distributed.barrier()
             current_training_step = current_training_step + 1
-            
-            if accelerator.process_index == 0 and epoch_temp != epoch:
-                epoch_temp = epoch
-                print('训练比例',current_training_step/total_training_steps*100,'%')
+            if accelerator.process_index == 0 and i % 50 == 0:
                 print(f'Epoch [{epoch+1}/{num_epochs}], Step [{i+1}/{total_steps}], Loss: {loss.item():.4f}')
-                unet_ema = accelerator.unwrap_model(cm_model_ema)
-                torch.save(unet_ema.state_dict(), f'ict_ema_4096e.pth')
-                if epoch % 1000 == 0:
-                    torch.save(unet_ema.state_dict(), f'ict_ema_4096e_{epoch}e.pth')
-                unet = accelerator.unwrap_model(cm_model)
-                torch.save(unet.state_dict(), f'ict_4096e.pth')
-                if epoch % 1000 == 0:
-                    torch.save(unet.state_dict(), f'ict_4096e_{epoch}e.pth')
-                unet_ema.eval()
-                with torch.no_grad():
-                    samples = consistency_sampling_and_editing(
-                        unet_ema, # student model or any trained model
-                        torch.randn((8, 3, 32, 32),device=accelerator.device), # used to infer the shapes
-                        sigmas=[80.0], # sampling starts at the maximum std (T)
-                        clip_denoised=True, # whether to clamp values to [-1, 1] range
-                        verbose=True,
-                    )
-                from torchvision.utils import save_image
-                save_image((samples/2+0.5).cpu().detach(), f'ict_images_{epoch}.png')
+                
+        if accelerator.process_index == 0:
+            print('训练比例',current_training_step/total_training_steps*100,'%') 
+            unet_ema = accelerator.unwrap_model(cm_model_ema)
+            torch.save(unet_ema.state_dict(), f'ict_ema_4096e.pth')
+            if epoch % 300 == 0:
+                torch.save(unet_ema.state_dict(), f'ict_ema_4096e_{epoch}e.pth')
+            unet = accelerator.unwrap_model(cm_model)
+            torch.save(unet.state_dict(), f'ict_4096e.pth')
+            if epoch % 300 == 0:
+                torch.save(unet.state_dict(), f'ict_4096e_{epoch}e.pth')
+            unet_ema.eval()
+            with torch.no_grad():
+                samples = consistency_sampling_and_editing(
+                    unet_ema, # student model or any trained model
+                    torch.randn((8, 3, 32, 32),device=accelerator.device), # used to infer the shapes
+                    sigmas=[80.0], # sampling starts at the maximum std (T)
+                    clip_denoised=True, # whether to clamp values to [-1, 1] range
+                    verbose=True,
+                )
+            from torchvision.utils import save_image
+            save_image((samples/2+0.5).cpu().detach(), f'ict_images_{epoch}.png')
