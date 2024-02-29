@@ -52,8 +52,8 @@ if __name__ == "__main__":
         sigma_max = 80.0, # maximum std of noise
         rho = 7.0, # karras-schedule hyper-parameter
         sigma_data = 0.5, # std of the data
-        initial_timesteps = 2, # number of discrete timesteps during training start
-        final_timesteps = 512, # number of discrete timesteps during training end
+        initial_timesteps = 10, # number of discrete timesteps during training start
+        final_timesteps = 1024, # number of discrete timesteps during training end
         lognormal_mean = -1.1, # mean of the lognormal timestep distribution
         lognormal_std = 2.0, # std of the lognormal timestep distribution
     )
