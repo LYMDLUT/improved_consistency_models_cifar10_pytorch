@@ -197,7 +197,7 @@ if __name__ == "__main__":
             for i in range(int(50000 / batch_size / accelerator.num_processes)):
                 with torch.no_grad():
                     samples = consistency_sampling_and_editing(
-                        cm_model_ema, # student model or any trained model
+                        ema_student_model, # student model or any trained model
                         torch.randn((batch_size, 3, 32, 32), device=accelerator.device), # used to infer the shapes
                         sigmas=[80.0], # sampling starts at the maximum std (T)
                         clip_denoised=True, # whether to clamp values to [-1, 1] range
