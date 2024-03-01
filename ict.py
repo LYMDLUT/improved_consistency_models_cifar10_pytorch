@@ -134,6 +134,6 @@ if __name__ == "__main__":
                 fid.update(accelerator.gather(image), real=False)
             fid_result = float(fid.compute())
             if accelerator.is_main_process:
-                print(f"FID: {fid_result}")
+                print(f"Epoch [{epoch+1}], FID: {fid_result}")
             fid.reset()
             torch.cuda.empty_cache()
