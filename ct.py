@@ -93,7 +93,6 @@ if __name__ == "__main__":
 
     # 定义数据加载器
     train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True)
-    test_loader = torch.utils.data.DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=False)
     
     # create optimizer
     optimizer = torch.optim.RAdam(cm_model.parameters(), lr=2e-4, betas=(0.9, 0.999)) # setup your optimizer
@@ -124,7 +123,7 @@ if __name__ == "__main__":
         fid.update(batch[0].to(accelerator.device), real=True)
     torch.cuda.empty_cache()
 
-    cm_model, cm_model_ema, ema_student_model, optimizer, test_loader, train_loader,  lpips, consistency_training, fid = accelerator.prepare(cm_model, cm_model_ema, ema_student_model, optimizer, test_loader, train_loader,  lpips, consistency_training, fid)
+    cm_model, cm_model_ema, ema_student_model, optimizer, scheduler, train_loader,  lpips, consistency_training, fid = accelerator.prepare(cm_model, cm_model_ema, ema_student_model, optimizer, scheduler, train_loader,  lpips, consistency_training, fid)
     
     current_training_step = 0
     total_steps = len(train_loader)
