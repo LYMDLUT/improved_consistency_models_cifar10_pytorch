@@ -1,5 +1,4 @@
 import torch
-import sys
 from accelerate import Accelerator
 from copy import deepcopy
 import torchvision.transforms as transforms
