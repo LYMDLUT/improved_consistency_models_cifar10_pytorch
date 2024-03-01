@@ -175,11 +175,11 @@ if __name__ == "__main__":
             print('训练比例',current_training_step/total_training_steps*100,'%')
             unet_ema = accelerator.unwrap_model(ema_student_model)
             torch.save(unet_ema.state_dict(), f'ct_ema_4096e.pth')
-            if epoch % 50 == 0:
+            if epoch % 50 == 0 and epoch != 0:
                 torch.save(unet_ema.state_dict(), f'ct_ema_4096e_{epoch}e.pth')
             unet = accelerator.unwrap_model(cm_model)
             torch.save(unet.state_dict(), f'ct_4096e.pth')
-            if epoch % 50 == 0:
+            if epoch % 50 == 0 and epoch != 0:
                 torch.save(unet.state_dict(), f'ct_4096e_{epoch}e.pth')
             unet_ema.eval()
             with torch.no_grad():
