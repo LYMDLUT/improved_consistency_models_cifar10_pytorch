@@ -25,7 +25,7 @@ if __name__ == "__main__":
     
     accelerator = Accelerator()
     batch_size = 128
-    num_epochs = 4096
+    num_epochs = 200
     # load dataset
     transform = transforms.Compose([
         transforms.RandomHorizontalFlip(),
@@ -40,11 +40,11 @@ if __name__ == "__main__":
     fid_loader = torch.utils.data.DataLoader(dataset=fid_dataset, batch_size=batch_size, shuffle=False)
     
     # create optimizer
-    optimizer = torch.optim.RAdam(cm_model.parameters(), lr=1e-4, betas=(0.9, 0.999)) # setup your optimizer
+    optimizer = torch.optim.RAdam(cm_model.parameters(), lr=2e-4, betas=(0.9, 0.999)) # setup your optimizer
     scheduler = torch.optim.lr_scheduler.LinearLR(
             optimizer,
             start_factor=1e-5,
-            total_iters=1000,
+            total_iters=100,
         )
     
     # Initialize the training module using
@@ -53,8 +53,8 @@ if __name__ == "__main__":
         sigma_max = 80.0, # maximum std of noise
         rho = 7.0, # karras-schedule hyper-parameter
         sigma_data = 0.5, # std of the data
-        initial_timesteps = 10, # number of discrete timesteps during training start
-        final_timesteps = 1280, # number of discrete timesteps during training end
+        initial_timesteps = 5, # number of discrete timesteps during training start
+        final_timesteps = 512, # number of discrete timesteps during training end
         lognormal_mean = -1.1, # mean of the lognormal timestep distribution
         lognormal_std = 2.0, # std of the lognormal timestep distribution
     )
@@ -93,7 +93,7 @@ if __name__ == "__main__":
             accelerator.backward(loss)
             optimizer.step()
             scheduler.step()
-            update_ema_model_(cm_model_ema, cm_model, 0.9999)
+            update_ema_model_(cm_model_ema, cm_model, 0.99)
             torch.distributed.barrier()
             current_training_step = current_training_step + 1
             if accelerator.process_index == 0 and i % 50 == 0:
@@ -121,7 +121,7 @@ if __name__ == "__main__":
             from torchvision.utils import save_image
             save_image((samples/2+0.5).cpu().detach(), f'ict_images_{epoch+1}.png')
         
-        if (epoch+1) % 10 == 0:
+        if (epoch+1) % 5 == 0:
             for i in range(int(50000 / batch_size / accelerator.num_processes)):
                 with torch.no_grad():
                     samples = consistency_sampling_and_editing(
