@@ -15,6 +15,7 @@ from models.ncsnpp import NCSNpp
 from configs.default_cifar10_configs import get_config
 from consistency_models import ConsistencySamplingAndEditing, ConsistencyTraining, ema_decay_rate_schedule
 from utils import update_ema_model_
+from torchmetrics.image.fid import FrechetInceptionDistance
 
 class PerceptualLoss(nn.Module):
     def __init__(
@@ -67,7 +68,7 @@ if __name__ == "__main__":
     # create model
     config = get_config()
     cm_model = NCSNpp(config)
-    #cm_model.load_state_dict(torch.load('/home/liuyiming/final_code_v2/convert_ckpt/ct-lpips/checkpoint_74.pth', map_location='cpu'))
+    #cm_model.load_state_dict(torch.load('./checkpoint_74.pth', map_location='cpu'))
     cm_model_ema = deepcopy(cm_model)
     ema_student_model = deepcopy(cm_model)
     cm_model.train()
@@ -78,6 +79,7 @@ if __name__ == "__main__":
         param.requires_grad = False
     ema_student_model.eval()
     
+    accelerator = Accelerator()
     batch_size = 128
     num_epochs = 4096
     # load dataset
@@ -116,13 +118,17 @@ if __name__ == "__main__":
     sigma_data = 0.5, # std of the data
     )
     lpips = PerceptualLoss(net_type=("vgg", "squeeze"))
-    accelerator = Accelerator()
-    cm_model, cm_model_ema, ema_student_model, optimizer, test_loader, train_loader, scheduler, lpips, consistency_training = accelerator.prepare(cm_model, cm_model_ema, ema_student_model, optimizer, test_loader, train_loader, scheduler, lpips, consistency_training)
+    
+    fid = FrechetInceptionDistance(reset_real_features=False, normalize=True).to(accelerator.device)
+    for i, batch in enumerate(train_loader):
+        fid.update(batch[0].to(accelerator.device), real=True)
+    torch.cuda.empty_cache()
+
+    cm_model, cm_model_ema, ema_student_model, optimizer, test_loader, train_loader,  lpips, consistency_training, fid = accelerator.prepare(cm_model, cm_model_ema, ema_student_model, optimizer, test_loader, train_loader,  lpips, consistency_training, fid)
     
     current_training_step = 0
     total_steps = len(train_loader)
     total_training_steps = num_epochs * len(train_loader)
-    epoch_temp = 0
     for epoch in tqdm(range(num_epochs)):
         for i, (images, lablel) in enumerate(train_loader):
             # Zero out Grads
@@ -153,6 +159,7 @@ if __name__ == "__main__":
                 initial_ema_decay_rate=0.9,
                 initial_timesteps=consistency_training.initial_timesteps,
             )
+
             update_ema_model_(cm_model_ema, cm_model, ema_decay_rate)
             
             # Update EMA student model
@@ -161,27 +168,44 @@ if __name__ == "__main__":
                 cm_model,
                 0.9999,
             )
-            
-            if accelerator.process_index == 0 and epoch_temp != epoch:
-                epoch_temp = epoch
-                print('训练比例',current_training_step/total_training_steps*100,'%')
+            if accelerator.process_index == 0 and i % 50 == 0:
                 print(f'Epoch [{epoch+1}/{num_epochs}], Step [{i+1}/{total_steps}], Loss: {loss.item():.4f}')
-                unet_ema = accelerator.unwrap_model(ema_student_model)
-                torch.save(unet_ema.state_dict(), f'ct_ema_4096e.pth')
-                if epoch % 1000 == 0:
-                    torch.save(unet_ema.state_dict(), f'ct_ema_4096e_{epoch}e.pth')
-                unet = accelerator.unwrap_model(cm_model)
-                torch.save(unet.state_dict(), f'ct_4096e.pth')
-                if epoch % 1000 == 0:
-                    torch.save(unet.state_dict(), f'ct_4096e_{epoch}e.pth')
-                unet_ema.eval()
+            
+        if accelerator.process_index == 0:
+            print('训练比例',current_training_step/total_training_steps*100,'%')
+            unet_ema = accelerator.unwrap_model(ema_student_model)
+            torch.save(unet_ema.state_dict(), f'ct_ema_4096e.pth')
+            if epoch % 50 == 0:
+                torch.save(unet_ema.state_dict(), f'ct_ema_4096e_{epoch}e.pth')
+            unet = accelerator.unwrap_model(cm_model)
+            torch.save(unet.state_dict(), f'ct_4096e.pth')
+            if epoch % 50 == 0:
+                torch.save(unet.state_dict(), f'ct_4096e_{epoch}e.pth')
+            unet_ema.eval()
+            with torch.no_grad():
+                samples = consistency_sampling_and_editing(
+                    unet_ema, # student model or any trained model
+                    torch.randn((8, 3, 32, 32),device=accelerator.device), # used to infer the shapes
+                    sigmas=[80.0], # sampling starts at the maximum std (T)
+                    clip_denoised=True, # whether to clamp values to [-1, 1] range
+                    verbose=True,
+                )
+            from torchvision.utils import save_image
+            save_image((samples/2+0.5).cpu().detach(), f'ct_images_{epoch}.png')
+            
+        if epoch % 5 == 0:
+            for i in range(int(50000 / batch_size / accelerator.num_processes)):
                 with torch.no_grad():
                     samples = consistency_sampling_and_editing(
-                        unet_ema, # student model or any trained model
-                        torch.randn((8, 3, 32, 32),device=accelerator.device), # used to infer the shapes
+                        cm_model_ema, # student model or any trained model
+                        torch.randn((batch_size, 3, 32, 32), device=accelerator.device), # used to infer the shapes
                         sigmas=[80.0], # sampling starts at the maximum std (T)
                         clip_denoised=True, # whether to clamp values to [-1, 1] range
-                        verbose=True,
-                    )
-                from torchvision.utils import save_image
-                save_image((samples/2+0.5).cpu().detach(), f'ct_images_{epoch}.png')
+                        verbose=True)
+                image = (samples / 2 + 0.5).clamp(0, 1)  
+                fid.update(accelerator.gather(image), real=False)
+            fid_result = float(fid.compute())
+            if accelerator.is_main_process:
+                print(f"FID: {fid_result}")
+            fid.reset()
+            torch.cuda.empty_cache()
