@@ -4,7 +4,6 @@ from accelerate import Accelerator
 from copy import deepcopy
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
-from tqdm import tqdm
 
 from models.ncsnpp import NCSNpp
 from configs.default_cifar10_configs import get_config
