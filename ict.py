@@ -32,11 +32,12 @@ if __name__ == "__main__":
         transforms.ToTensor(),
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     ])
+    
     train_dataset = datasets.CIFAR10(root='./data', train=True, transform=transform, download=True)
-    test_dataset = datasets.CIFAR10(root='./data', train=False, transform=transform)
-
+    fid_dataset = datasets.CIFAR10(root='./data', train=True, transform=transforms.ToTensor())
     # 定义数据加载器
     train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True)
+    fid_loader = torch.utils.data.DataLoader(dataset=fid_dataset, batch_size=batch_size, shuffle=False)
     
     # create optimizer
     optimizer = torch.optim.RAdam(cm_model.parameters(), lr=1e-4, betas=(0.9, 0.999)) # setup your optimizer
@@ -63,7 +64,7 @@ if __name__ == "__main__":
     sigma_data = 0.5, # std of the data
     )
     fid = FrechetInceptionDistance(reset_real_features=False, normalize=True).to(accelerator.device)
-    for i, batch in enumerate(train_loader):
+    for i, batch in enumerate(fid_loader):
         fid.update(batch[0].to(accelerator.device), real=True)
     torch.cuda.empty_cache() 
     cm_model, cm_model_ema, optimizer, train_loader, pseudo_huber_loss, scheduler, improved_consistency_training, fid = accelerator.prepare(cm_model, cm_model_ema, optimizer, train_loader, pseudo_huber_loss, scheduler, improved_consistency_training, fid)
