@@ -185,7 +185,7 @@ if __name__ == "__main__":
             with torch.no_grad():
                 samples = consistency_sampling_and_editing(
                     unet_ema, # student model or any trained model
-                    torch.randn((8, 3, 32, 32),device=accelerator.device), # used to infer the shapes
+                    torch.randn((64, 3, 32, 32),device=accelerator.device), # used to infer the shapes
                     sigmas=[80.0], # sampling starts at the maximum std (T)
                     clip_denoised=True, # whether to clamp values to [-1, 1] range
                     verbose=True,
