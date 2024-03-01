@@ -103,12 +103,12 @@ if __name__ == "__main__":
             print('训练比例',current_training_step/total_training_steps*100,'%') 
             unet_ema = accelerator.unwrap_model(cm_model_ema)
             torch.save(unet_ema.state_dict(), f'ict_ema_4096e.pth')
-            if epoch % 50 == 0 and epoch != 0:
-                torch.save(unet_ema.state_dict(), f'ict_ema_4096e_{epoch}e.pth')
+            if (epoch+1) % 50 == 0:
+                torch.save(unet_ema.state_dict(), f'ict_ema_4096e_{epoch+1}e.pth')
             unet = accelerator.unwrap_model(cm_model)
             torch.save(unet.state_dict(), f'ict_4096e.pth')
-            if epoch % 50 == 0 and epoch != 0:
-                torch.save(unet.state_dict(), f'ict_4096e_{epoch}e.pth')
+            if (epoch+1) % 50 == 0:
+                torch.save(unet.state_dict(), f'ict_4096e_{epoch+1}e.pth')
             unet_ema.eval()
             with torch.no_grad():
                 samples = consistency_sampling_and_editing(
@@ -119,9 +119,9 @@ if __name__ == "__main__":
                     verbose=True,
                 )
             from torchvision.utils import save_image
-            save_image((samples/2+0.5).cpu().detach(), f'ict_images_{epoch}.png')
+            save_image((samples/2+0.5).cpu().detach(), f'ict_images_{epoch+1}.png')
         
-        if epoch % 10 == 0:
+        if (epoch+1) % 10 == 0:
             for i in range(int(50000 / batch_size / accelerator.num_processes)):
                 with torch.no_grad():
                     samples = consistency_sampling_and_editing(
