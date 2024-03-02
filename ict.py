@@ -91,7 +91,7 @@ if __name__ == "__main__":
             accelerator.backward(loss)
             optimizer.step()
             scheduler.step()
-            update_ema_model_(cm_model_ema, cm_model, 0.9999)
+            update_ema_model_(cm_model_ema, cm_model, 0.99993)
             torch.distributed.barrier()
             current_training_step = current_training_step + 1
             if accelerator.process_index == 0 and i % 50 == 0:
