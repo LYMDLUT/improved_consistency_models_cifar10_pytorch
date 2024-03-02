@@ -42,7 +42,7 @@ if __name__ == "__main__":
     scheduler = torch.optim.lr_scheduler.LinearLR(
             optimizer,
             start_factor=1e-5,
-            total_iters=50,
+            total_iters=20,
         )
     
     # Initialize the training module using
