@@ -1,4 +1,4 @@
-I and @Buntender are trying to reimplement ict on cifar10 with Pytorch.
+@Buntender and I are in the process of reimplementing ICT on CIFAR10 using PyTorch.
 
 |  epoch   | initial_timesteps  | final_timesteps | ema | FID |
 |  ----    |    ----   |    ----    |     ----   |   ----  | 
