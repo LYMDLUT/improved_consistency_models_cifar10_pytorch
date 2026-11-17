@@ -17,7 +17,6 @@
 """
 
 import torch
-# from .. import sde_lib
 import numpy as np
 
 
@@ -126,58 +125,6 @@ def get_model_fn(model, train=False):
   return model_fn
 
 
-def get_score_fn(sde, model, train=False, continuous=False):
-  """Wraps `score_fn` so that the model output corresponds to a real time-dependent score function.
-
-  Args:
-    sde: An `sde_lib.SDE` object that represents the forward SDE.
-    model: A score model.
-    train: `True` for training and `False` for evaluation.
-    continuous: If `True`, the score-based model is expected to directly take continuous time steps.
-
-  Returns:
-    A score function.
-  """
-  model_fn = get_model_fn(model, train=train)
-
-  if isinstance(sde, sde_lib.VPSDE) or isinstance(sde, sde_lib.subVPSDE):
-    def score_fn(x, t):
-      # Scale neural network output by standard deviation and flip sign
-      if continuous or isinstance(sde, sde_lib.subVPSDE):
-        # For VP-trained models, t=0 corresponds to the lowest noise level
-        # The maximum value of time embedding is assumed to 999 for
-        # continuously-trained models.
-        labels = t * 999
-        score = model_fn(x, labels)
-        std = sde.marginal_prob(torch.zeros_like(x), t)[1]
-      else:
-        # For VP-trained models, t=0 corresponds to the lowest noise level
-        labels = t * (sde.N - 1)
-        score = model_fn(x, labels)
-        std = sde.sqrt_1m_alphas_cumprod.to(labels.device)[labels.long()]
-
-      score = -score / std[:, None, None, None]
-      return score
-
-  elif isinstance(sde, sde_lib.VESDE):
-    def score_fn(x, t):
-      if continuous:
-        labels = sde.marginal_prob(torch.zeros_like(x), t)[1]
-      else:
-        # For VE-trained models, t=0 corresponds to the highest noise level
-        labels = sde.T - t
-        labels *= sde.N - 1
-        labels = torch.round(labels).long()
-
-      score = model_fn(x, labels)
-      return score
-
-  else:
-    raise NotImplementedError(f"SDE class {sde.__class__.__name__} not yet supported.")
-
-  return score_fn
-
-
 def to_flattened_numpy(x):
   """Flatten a torch tensor `x` and convert it to numpy."""
   return x.detach().cpu().numpy().reshape((-1,))
@@ -186,27 +133,3 @@ def to_flattened_numpy(x):
 def from_flattened_numpy(x, shape):
   """Form a torch tensor with the given `shape` from a flattened numpy array `x`."""
   return torch.from_numpy(x.reshape(shape))
-
-
-def get_distiller_fn(
-  sde, model, train=False, return_state=False, pred_t=None
-):
-  assert isinstance(
-    sde, sde_lib.KVESDE
-  ), "Only KVE SDE is supported for building the denoiser"
-  model_fn = get_model_fn(model, train=train)
-
-  if pred_t is None:
-    pred_t = sde.t_min
-
-  def distiller_fn(x, t):
-    in_x = x * (1 / torch.sqrt(t**2 + sde.data_std**2))[:,None,None,None]
-    cond_t = 0.25 * torch.log(t)
-    denoiser = model_fn(in_x, cond_t)
-    denoiser = denoiser * ((t - pred_t) * sde.data_std / torch.sqrt(t**2 + sde.data_std**2))[:,None,None,None]
-    skip_x = x * (sde.data_std**2 / ((t - pred_t) ** 2 + sde.data_std**2))[:,None,None,None]
-    denoiser = skip_x + denoiser
-
-    return denoiser
-
-  return distiller_fn

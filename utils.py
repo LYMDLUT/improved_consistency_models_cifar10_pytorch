@@ -1,6 +1,19 @@
-from typing import Iterator
+from collections.abc import Iterator
+from contextlib import contextmanager
+
 import torch
 from torch import Tensor, nn
+
+
+@contextmanager
+def fork_rng(device: torch.device) -> Iterator[None]:
+    """Restores the RNG states of the CPU and ``device`` when the context exits."""
+    if device.type == "cpu":
+        with torch.random.fork_rng(devices=[]):
+            yield
+    else:
+        with torch.random.fork_rng(devices=[device], device_type=device.type):
+            yield
 
 
 def pad_dims_like(x: Tensor, other: Tensor) -> Tensor:
@@ -20,6 +33,7 @@ def pad_dims_like(x: Tensor, other: Tensor) -> Tensor:
     """
     ndim = other.ndim - x.ndim
     return x.view(*x.shape, *((1,) * ndim))
+
 
 @torch.no_grad()
 def update_ema_model_(
@@ -43,8 +57,13 @@ def update_ema_model_(
     """
     param = [p.data for p in online_model.parameters()]
     param_ema = [p.data for p in ema_model.parameters()]
+    if len(param) != len(param_ema):
+        raise ValueError(
+            f"EMA model has {len(param_ema)} parameters, "
+            f"but the online model has {len(param)}."
+        )
 
     torch._foreach_mul_(param_ema, ema_decay_rate)
     torch._foreach_add_(param_ema, param, alpha=1 - ema_decay_rate)
-    
+
     return ema_model

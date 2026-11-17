@@ -1,0 +1,12 @@
+[tool.ruff]
+line-length = 88
+target-version = "py39"
+# Vendored from score_sde_pytorch; kept close to upstream.
+extend-exclude = ["models"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

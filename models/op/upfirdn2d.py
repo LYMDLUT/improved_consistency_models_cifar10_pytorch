@@ -1,19 +1,58 @@
+"""Upsample, FIR filter and downsample (``upfirdn2d``) used by NCSN++.
+
+The CUDA kernel is compiled lazily on first use. If compilation fails (e.g. no
+``nvcc`` or ``ninja``), a pure PyTorch implementation with identical outputs is
+used instead. Set ``UPFIRDN2D_BACKEND`` to ``native`` to always use the PyTorch
+implementation, or to ``cuda`` to raise instead of falling back.
+"""
+
 import os
+import warnings
 
 import torch
-from torch.nn import functional as F
 from torch.autograd import Function
-from torch.utils.cpp_extension import load
+from torch.nn import functional as F
+
+_BACKEND = os.environ.get("UPFIRDN2D_BACKEND", "auto").lower()
+if _BACKEND not in ("auto", "cuda", "native"):
+    raise ValueError(
+        f"UPFIRDN2D_BACKEND must be one of 'auto', 'cuda' or 'native', got {_BACKEND!r}."
+    )
+
+# Dtypes supported by AT_DISPATCH_FLOATING_TYPES_AND_HALF in the CUDA kernel.
+_CUDA_DTYPES = (torch.float16, torch.float32, torch.float64)
+
+_upfirdn2d_op = None
+_load_failed = False
 
 
-module_path = os.path.dirname(__file__)
-upfirdn2d_op = load(
-    "upfirdn2d",
-    sources=[
-        os.path.join(module_path, "upfirdn2d.cpp"),
-        os.path.join(module_path, "upfirdn2d_kernel.cu"),
-    ],
-)
+def _get_cuda_op():
+    """Returns the compiled CUDA extension, or ``None`` if it is unavailable."""
+    global _upfirdn2d_op, _load_failed
+    if _upfirdn2d_op is not None or _load_failed or _BACKEND == "native":
+        return _upfirdn2d_op
+
+    try:
+        from torch.utils.cpp_extension import load
+
+        module_path = os.path.dirname(__file__)
+        _upfirdn2d_op = load(
+            "upfirdn2d",
+            sources=[
+                os.path.join(module_path, "upfirdn2d.cpp"),
+                os.path.join(module_path, "upfirdn2d_kernel.cu"),
+            ],
+        )
+    except Exception as exc:
+        if _BACKEND == "cuda":
+            raise
+        _load_failed = True
+        warnings.warn(
+            f"Could not build the upfirdn2d CUDA extension ({exc}). "
+            "Falling back to the native PyTorch implementation.",
+            stacklevel=2,
+        )
+    return _upfirdn2d_op
 
 
 class UpFirDn2dBackward(Function):
@@ -21,14 +60,13 @@ class UpFirDn2dBackward(Function):
     def forward(
         ctx, grad_output, kernel, grad_kernel, up, down, pad, g_pad, in_size, out_size
     ):
-
         up_x, up_y = up
         down_x, down_y = down
         g_pad_x0, g_pad_x1, g_pad_y0, g_pad_y1 = g_pad
 
         grad_output = grad_output.reshape(-1, out_size[0], out_size[1], 1)
 
-        grad_input = upfirdn2d_op.upfirdn2d(
+        grad_input = _upfirdn2d_op.upfirdn2d(
             grad_output,
             grad_kernel,
             down_x,
@@ -61,11 +99,11 @@ class UpFirDn2dBackward(Function):
 
     @staticmethod
     def backward(ctx, gradgrad_input):
-        kernel, = ctx.saved_tensors
+        (kernel,) = ctx.saved_tensors
 
         gradgrad_input = gradgrad_input.reshape(-1, ctx.in_size[2], ctx.in_size[3], 1)
 
-        gradgrad_out = upfirdn2d_op.upfirdn2d(
+        gradgrad_out = _upfirdn2d_op.upfirdn2d(
             gradgrad_input,
             kernel,
             ctx.up_x,
@@ -77,7 +115,6 @@ class UpFirDn2dBackward(Function):
             ctx.pad_y0,
             ctx.pad_y1,
         )
-        # gradgrad_out = gradgrad_out.view(ctx.in_size[0], ctx.out_size[0], ctx.out_size[1], ctx.in_size[3])
         gradgrad_out = gradgrad_out.view(
             ctx.in_size[0], ctx.in_size[1], ctx.out_size[0], ctx.out_size[1]
         )
@@ -115,10 +152,9 @@ class UpFirDn2d(Function):
 
         ctx.g_pad = (g_pad_x0, g_pad_x1, g_pad_y0, g_pad_y1)
 
-        out = upfirdn2d_op.upfirdn2d(
+        out = _upfirdn2d_op.upfirdn2d(
             input, kernel, up_x, up_y, down_x, down_y, pad_x0, pad_x1, pad_y0, pad_y1
         )
-        # out = out.view(major, out_h, out_w, minor)
         out = out.view(-1, channel, out_h, out_w)
 
         return out
@@ -143,17 +179,19 @@ class UpFirDn2d(Function):
 
 
 def upfirdn2d(input, kernel, up=1, down=1, pad=(0, 0)):
-    if input.device.type == "cpu":
-        out = upfirdn2d_native(
-            input, kernel, up, up, down, down, pad[0], pad[1], pad[0], pad[1]
-        )
-
-    else:
-        out = UpFirDn2d.apply(
+    kernel = kernel.to(device=input.device, dtype=input.dtype)
+    if (
+        input.device.type == "cuda"
+        and input.dtype in _CUDA_DTYPES
+        and _get_cuda_op() is not None
+    ):
+        return UpFirDn2d.apply(
             input, kernel, (up, up), (down, down), (pad[0], pad[1], pad[0], pad[1])
         )
 
-    return out
+    return upfirdn2d_native(
+        input, kernel, up, up, down, down, pad[0], pad[1], pad[0], pad[1]
+    )
 
 
 def upfirdn2d_native(

@@ -1,12 +1,13 @@
 import math
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any, Callable, Iterable, Optional, Tuple, Union
+from typing import Any, Callable, Optional, Union
 
 import torch
 from torch import Tensor, nn
 from tqdm.auto import tqdm
 
-from utils import pad_dims_like
+from utils import fork_rng, pad_dims_like
 
 
 def timesteps_schedule(
@@ -72,8 +73,8 @@ def improved_timesteps_schedule(
         total_training_steps
         / (math.log2(math.floor(final_timesteps / initial_timesteps)) + 1)
     )
-    num_timesteps = initial_timesteps * math.pow(
-        2, math.floor(current_training_step / total_training_steps_prime)
+    num_timesteps = initial_timesteps * 2 ** (
+        current_training_step // total_training_steps_prime
     )
     num_timesteps = min(num_timesteps, final_timesteps) + 1
 
@@ -135,9 +136,7 @@ def karras_schedule(
     rho_inv = 1.0 / rho
     # Clamp steps to 1 so that we don't get nans
     steps = torch.arange(num_timesteps, device=device) / max(num_timesteps - 1, 1)
-    sigmas = sigma_min**rho_inv + steps * (
-        sigma_max**rho_inv - sigma_min**rho_inv
-    )
+    sigmas = sigma_min**rho_inv + steps * (sigma_max**rho_inv - sigma_min**rho_inv)
     sigmas = sigmas**rho
 
     return sigmas
@@ -202,7 +201,10 @@ def improved_loss_weighting(sigmas: Tensor) -> Tensor:
 
 
 def pseudo_huber_loss(input: Tensor, target: Tensor) -> Tensor:
-    """Computes the pseudo huber loss.
+    """Computes the Pseudo-Huber metric for every sample in the batch.
+
+    ``d(x, y) = sqrt(||x - y||_2^2 + c^2) - c`` with ``c = 0.00054 * sqrt(d)``, where
+    the norm is taken over all non-batch dimensions and ``d`` is their total size.
 
     Parameters
     ----------
@@ -214,10 +216,15 @@ def pseudo_huber_loss(input: Tensor, target: Tensor) -> Tensor:
     Returns
     -------
     Tensor
-        Pseudo huber loss.
+        Pseudo-Huber loss of shape ``(batch_size,)``.
+
+    References
+    ----------
+    [1] [Improved Techniques For Consistency Training](https://arxiv.org/pdf/2310.14189.pdf)
     """
     c = 0.00054 * math.sqrt(math.prod(input.shape[1:]))
-    return torch.sqrt((input - target) ** 2 + c**2) - c
+    squared_norm = (input - target).pow(2).flatten(start_dim=1).sum(dim=1)
+    return torch.sqrt(squared_norm + c**2) - c
 
 
 def skip_scaling(
@@ -297,12 +304,15 @@ def model_forward_wrapper(
     """
     c_skip = skip_scaling(sigma, sigma_data, sigma_min)
     c_out = output_scaling(sigma, sigma_data, sigma_min)
+    c_in = (sigma_data**2 + sigma**2) ** -0.5
+    c_noise = 0.25 * torch.log(sigma)
 
     # Pad dimensions as broadcasting will not work
     c_skip = pad_dims_like(c_skip, x)
     c_out = pad_dims_like(c_out, x)
-    sigma_pad = pad_dims_like(sigma, x)
-    return c_skip * x + c_out * model(x/((sigma_data**2+sigma_pad**2)**0.5), 0.25 * torch.log(sigma), **kwargs)
+    c_in = pad_dims_like(c_in, x)
+    return c_skip * x + c_out * model(c_in * x, c_noise, **kwargs)
+
 
 @dataclass
 class ConsistencyTrainingOutput:
@@ -315,11 +325,13 @@ class ConsistencyTrainingOutput:
     target : Tensor
         Target values.
     num_timesteps : int
-        Number of timesteps at the current point in training from the timestep discretization schedule.
+        Number of timesteps at the current point in training from the timestep
+        discretization schedule.
     sigmas : Tensor
         Standard deviations of the noise.
     loss_weights : Optional[Tensor], default=None
-        Weighting for the Improved Consistency Training loss.
+        Per-sample weighting of shape ``(batch_size,)`` for the Improved
+        Consistency Training loss.
     """
 
     predicted: Tensor
@@ -393,7 +405,8 @@ class ConsistencyTraining:
         Returns
         -------
         ConsistencyTrainingOutput
-            The predicted and target values for computing the loss as well as sigmas (noise levels).
+            The predicted and target values for computing the loss as well as sigmas
+            (noise levels).
         """
         num_timesteps = timesteps_schedule(
             current_training_step,
@@ -412,14 +425,16 @@ class ConsistencyTraining:
         next_sigmas = sigmas[timesteps + 1]
 
         next_noisy_x = x + pad_dims_like(next_sigmas, x) * noise
-        next_x = model_forward_wrapper(
-            student_model,
-            next_noisy_x,
-            next_sigmas,
-            self.sigma_data,
-            self.sigma_min,
-            **kwargs,
-        )
+        # Replaying the RNG state gives the teacher the same dropout masks.
+        with fork_rng(x.device):
+            next_x = model_forward_wrapper(
+                student_model,
+                next_noisy_x,
+                next_sigmas,
+                self.sigma_data,
+                self.sigma_min,
+                **kwargs,
+            )
 
         with torch.no_grad():
             current_noisy_x = x + pad_dims_like(current_sigmas, x) * noise
@@ -492,8 +507,6 @@ class ImprovedConsistencyTraining:
         ----------
         model : nn.Module
             Both teacher and student model.
-        teacher_model : nn.Module
-            Teacher model.
         x : Tensor
             Clean data.
         current_training_step : int
@@ -506,7 +519,8 @@ class ImprovedConsistencyTraining:
         Returns
         -------
         ConsistencyTrainingOutput
-            The predicted and target values for computing the loss, sigmas (noise levels) as well as the loss weights.
+            The predicted and target values for computing the loss, sigmas (noise
+            levels) as well as the loss weights.
         """
 
         num_timesteps = improved_timesteps_schedule(
@@ -523,21 +537,21 @@ class ImprovedConsistencyTraining:
         timesteps = lognormal_timestep_distribution(
             x.shape[0], sigmas, self.lognormal_mean, self.lognormal_std
         )
-  
-        # if noise.device==torch.device('cuda:0'):
-        #     print('步数',(timesteps).tolist())
+
         current_sigmas = sigmas[timesteps]
         next_sigmas = sigmas[timesteps + 1]
 
         next_noisy_x = x + pad_dims_like(next_sigmas, x) * noise
-        next_x = model_forward_wrapper(
-            model,
-            next_noisy_x,
-            next_sigmas,
-            self.sigma_data,
-            self.sigma_min,
-            **kwargs,
-        )
+        # Replaying the RNG state gives the teacher the same dropout masks (iCT 3.1).
+        with fork_rng(x.device):
+            next_x = model_forward_wrapper(
+                model,
+                next_noisy_x,
+                next_sigmas,
+                self.sigma_data,
+                self.sigma_min,
+                **kwargs,
+            )
 
         with torch.no_grad():
             current_noisy_x = x + pad_dims_like(current_sigmas, x) * noise
@@ -550,7 +564,7 @@ class ImprovedConsistencyTraining:
                 **kwargs,
             )
 
-        loss_weights = pad_dims_like(improved_loss_weighting(sigmas)[timesteps], next_x)
+        loss_weights = improved_loss_weighting(sigmas)[timesteps]
 
         return ConsistencyTrainingOutput(
             next_x, current_x, num_timesteps, sigmas, loss_weights
@@ -606,11 +620,12 @@ class ConsistencySamplingAndEditing:
         inverse_transform_fn : Callable[[Tensor], Tensor], default=lambda x: x
             Inverse of the linear transformation. Defaults to the identity function.
         start_from_y : bool, default=False
-            Whether to use y as an initial sample and add noise to it instead of starting
-            from random gaussian noise. This is useful for tasks like style transfer.
+            Whether to use y as an initial sample and add noise to it instead of
+            starting from random gaussian noise. This is useful for tasks like style
+            transfer.
         add_initial_noise : bool, default=True
-            Whether to add noise at the start of the schedule. Useful for tasks like interpolation
-            where noise will alerady be added in advance.
+            Whether to add noise at the start of the schedule. Useful for tasks like
+            interpolation where noise will already be added in advance.
         clip_denoised : bool, default=False
             Whether to clip denoised values to [-1, 1] range.
         verbose : bool, default=False
@@ -646,7 +661,7 @@ class ConsistencySamplingAndEditing:
 
         # Progressively denoise the sample and skip the first step as it has already
         # been run
-        pbar = tqdm(sigmas[1:], disable=verbose)
+        pbar = tqdm(sigmas[1:], disable=not verbose)
         for sigma in pbar:
             pbar.set_description(f"sampling (σ={sigma:.4f})")
 

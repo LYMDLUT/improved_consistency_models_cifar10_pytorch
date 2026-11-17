@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+data/
+outputs/
+*.pt
+*.pth
+*.t7
+*.npz

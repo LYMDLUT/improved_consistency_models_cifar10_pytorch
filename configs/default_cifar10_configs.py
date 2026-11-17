@@ -41,7 +41,7 @@ def get_config():
     model.progressive_combine = "sum"
     model.attention_type = "ddpm"
     model.init_scale = 0.0
-    model.fourier_scale = 16
+    model.fourier_scale = 16.0
     model.conv_size = 3
     model.rho = 7.0
     model.data_std = 0.5
